@@ -1,0 +1,5 @@
+streamlit
+pyodbc
+openai
+pandas
+plotly

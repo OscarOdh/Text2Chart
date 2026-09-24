@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text2Chart - Technical Design</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent-primary: #3b82f6;
+            --accent-secondary: #8b5cf6;
+            --card-bg: rgba(30, 41, 59, 0.5);
+            --card-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            background-image: 
+                radial-gradient(circle at 15% 50%, rgba(59, 130, 246, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 85% 30%, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
+            background-attachment: fixed;
+            line-height: 1.6;
+            display: flex;
+        }
+
+        /* Sidebar Navigation */
+        nav {
+            width: 280px;
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            border-right: 1px solid var(--card-border);
+            padding: 2rem 1.5rem;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+
+        nav h2 {
+            font-size: 1.2rem;
+            color: #fff;
+            margin-bottom: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        nav li {
+            margin-bottom: 0.8rem;
+        }
+
+        nav a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            display: block;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+        }
+
+        nav a:hover, nav a.active {
+            color: #fff;
+            background: rgba(255, 255, 255, 0.05);
+            transform: translateX(5px);
+        }
+
+        /* Main Content */
+        main {
+            margin-left: 280px;
+            padding: 4rem;
+            max-width: 1000px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        header {
+            margin-bottom: 4rem;
+            animation: fadeInDown 1s ease-out;
+        }
+
+        h1 {
+            font-size: 3.5rem;
+            line-height: 1.1;
+            margin: 0 0 1rem 0;
+            color: #fff;
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            color: var(--accent-primary);
+            font-weight: 500;
+        }
+
+        section {
+            margin-bottom: 5rem;
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fadeInUp 0.8s ease-out forwards;
+        }
+
+        section:nth-child(2) { animation-delay: 0.1s; }
+        section:nth-child(3) { animation-delay: 0.2s; }
+        section:nth-child(4) { animation-delay: 0.3s; }
+        section:nth-child(5) { animation-delay: 0.4s; }
+
+        h2.section-title {
+            font-size: 2rem;
+            color: #fff;
+            border-bottom: 2px solid var(--card-border);
+            padding-bottom: 0.5rem;
+            margin-bottom: 2rem;
+            display: inline-block;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .card h3 {
+            margin-top: 0;
+            color: #fff;
+            font-size: 1.4rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .badge {
+            background: rgba(59, 130, 246, 0.2);
+            color: var(--accent-primary);
+            padding: 0.2rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-family: 'Fira Code', monospace;
+            border: 1px solid rgba(59, 130, 246, 0.4);
+        }
+
+        ul.feature-list {
+            padding-left: 1.5rem;
+        }
+
+        ul.feature-list li {
+            margin-bottom: 0.8rem;
+        }
+
+        ul.feature-list li::marker {
+            color: var(--accent-primary);
+        }
+
+        code {
+            font-family: 'Fira Code', monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.9em;
+            color: #fbbf24;
+        }
+
+        /* Animations */
+        @keyframes fadeInDown {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            body { flex-direction: column; }
+            nav {
+                width: 100%;
+                height: auto;
+                position: relative;
+                padding: 1.5rem;
+                border-right: none;
+                border-bottom: 1px solid var(--card-border);
+            }
+            main {
+                margin-left: 0;
+                padding: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <nav>
+        <h2>Text2Chart</h2>
+        <ul>
+            <li><a href="#executive-summary">1. Executive Summary</a></li>
+            <li><a href="#architecture">2. Architecture Overview</a></li>
+            <li><a href="#modules">3. Detailed Module Analysis</a>
+                <ul style="padding-left: 1rem; margin-top: 0.5rem;">
+                    <li><a href="#mod-app">3.1 app.py</a></li>
+                    <li><a href="#mod-ui">3.2 ui_components.py</a></li>
+                    <li><a href="#mod-db">3.3 db_manager.py</a></li>
+                    <li><a href="#mod-ai">3.4 ai_manager.py</a></li>
+                    <li><a href="#mod-chart">3.5 chart_utils.py</a></li>
+                    <li><a href="#mod-config">3.6 config_manager.py</a></li>
+                    <li><a href="#mod-style">3.7 style_manager.py</a></li>
+                </ul>
+            </li>
+            <li><a href="#security">4. Security & Constraints</a></li>
+        </ul>
+    </nav>
+
+    <main>
+        <header>
+            <h1>Technical Design & Architecture Document</h1>
+            <div class="subtitle">Target Audience: Principal / Head Software Engineer</div>
+        </header>
+
+        <section id="executive-summary">
+            <h2 class="section-title">1. Executive Summary</h2>
+            <div class="card">
+                <p><strong>Text2Chart</strong> is a robust, local-first Streamlit application designed to bridge the gap between natural language and database visualization. It translates user queries into syntactically valid Microsoft SQL Server (T-SQL) statements via an OpenAI-compatible LLM (e.g., LM Studio), executes them securely against a target database, and presents the results dynamically as either formatted DataFrames or interactive Plotly charts.</p>
+                <p>The architecture heavily emphasizes a seamless, modern User Experience (UX), employing significant JavaScript and CSS injection to bypass Streamlit's native limitations (e.g., custom autocomplete overlays, DOM manipulation for popovers). It prioritizes deterministic SQL generation, robust error handling, query execution timeouts, and smart visual heuristics.</p>
+            </div>
+        </section>
+
+        <section id="architecture">
+            <h2 class="section-title">2. Architecture Overview</h2>
+            <div class="card">
+                <p>The application follows a modular, state-driven architecture within the Streamlit lifecycle:</p>
+                <ul class="feature-list">
+                    <li><strong>State Management:</strong> Streamlit's <code>session_state</code> manages the DB connections, AI client, chat history, and UI interaction flags.</li>
+                    <li><strong>Frontend Layer:</strong> Streamlit core components augmented by custom CSS (<code>style_manager.py</code>) and injected vanilla JavaScript for advanced interactions (<code>ui_components.py</code>).</li>
+                    <li><strong>Orchestration Layer:</strong> <code>app.py</code> acts as the controller, coordinating between the UI, AI, and DB managers.</li>
+                    <li><strong>Data Access Layer:</strong> <code>db_manager.py</code> handles pyodbc connections, advanced schema extraction, and chunked query execution.</li>
+                    <li><strong>Intelligence Layer:</strong> <code>ai_manager.py</code> interacts with the local LLM, utilizing a dense, rule-based system prompt to ensure precise T-SQL generation.</li>
+                    <li><strong>Visualization Layer:</strong> <code>chart_utils.py</code> applies heuristics to map DataFrame structures to Plotly Express charts.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="modules">
+            <h2 class="section-title">3. Detailed Module Analysis</h2>
+
+            <div id="mod-app" class="card">
+                <h3>Application Entry & Orchestration <span class="badge">app.py</span></h3>
+                <ul class="feature-list">
+                    <li><strong>Session Initialization:</strong> Initializes critical state variables (<code>messages</code>, <code>db_manager</code>, <code>ai_manager</code>, <code>schema_context</code>) on the first run.</li>
+                    <li><strong>Auto-Connect:</strong> Implements a one-time auto-connect routine using credentials from <code>settings.ini</code> to bypass the configuration screen on startup if credentials exist.</li>
+                    <li><strong>Chat Loop:</strong> Iterates over session messages. Employs conditional rendering based on message types (user, error, dataframe, chart).</li>
+                    <li><strong>Message Actions (Popovers):</strong> Uses Streamlit popovers (<code>st.popover</code>) to inject contextual menus on past messages (e.g., converting a DataFrame to a Bar/Line/Pie chart, editing an existing chart, or deleting a message).</li>
+                    <li><strong>JS Event Triggering:</strong> To handle the asynchronous nature of Streamlit, actions triggered from popovers set a flag. A hidden HTML component injects a mock click event on the parent document's body to force the popover to close immediately.</li>
+                    <li><strong>AI Execution Pipeline:</strong>
+                        <ol>
+                            <li>Appends the user query to the UI.</li>
+                            <li>Injects a high-performance JavaScript timer for real-time latency feedback without triggering Python re-runs.</li>
+                            <li>Sends schema, history (last 6 messages max), and prompt to the AI.</li>
+                            <li>Parses the returned SQL, executes it via <code>db_manager</code>, and renders the result.</li>
+                        </ol>
+                    </li>
+                </ul>
+            </div>
+
+            <div id="mod-ui" class="card">
+                <h3>UI Components & Frontend Engineering <span class="badge">ui_components.py</span></h3>
+                <ul class="feature-list">
+                    <li><strong>Advanced Autocomplete System:</strong> Overcomes Streamlit's lack of native chat input autocomplete.
+                        <ul>
+                            <li>Injects a sophisticated Vanilla JS script that attaches listeners to the Streamlit chat input.</li>
+                            <li>Dynamically filters a JSON-serialized user history array.</li>
+                            <li>Renders a custom floating DOM element perfectly positioned above the input box.</li>
+                            <li>Supports full keyboard navigation and seamlessly updates the React-controlled textarea.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Smart DataFrame Rendering:</strong>
+                        <ul>
+                            <li><em>Link Injection:</em> Uses Regex to detect 'address' columns and wraps them in Google Maps URLs.</li>
+                            <li><em>Dynamic Formatting:</em> Inspects column names for keywords ('amount', 'pct', etc.) and applies Pandas Styler formatting.</li>
+                            <li><em>Deduplication:</em> Safely deduplicates identical column names to prevent PyArrow serialization crashes.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Chart Editor UI:</strong> Provides a bounded state for modifying an existing chart, allowing users to override axes and manually reorder categorical axes.</li>
+                    <li><strong>Sidebar History Management:</strong> Implements a highly customized, tight-layout history view with extensively styled deletion and population buttons.</li>
+                </ul>
+            </div>
+
+            <div id="mod-db" class="card">
+                <h3>Database Management & Schema Extraction <span class="badge">db_manager.py</span></h3>
+                <ul class="feature-list">
+                    <li><strong>ODBC Connection:</strong> Utilizes <code>pyodbc</code> with the standard 'ODBC Driver 17 for SQL Server'.</li>
+                    <li><strong>Advanced Schema Extraction:</strong> Uses heavy, optimized system queries to extract:
+                        <ol>
+                            <li>Base tables and column types.</li>
+                            <li>Foreign Key relationships.</li>
+                            <li>Index definitions (Primary Keys, Unique constraints).</li>
+                            <li>Extended Properties.</li>
+                        </ol>
+                        This rich context is optimized for LLM token efficiency, allowing implicit understanding of relationships.
+                    </li>
+                    <li><strong>Safe Execution & Chunking:</strong>
+                        <ul>
+                            <li><em>Server-Side Timeout:</em> Hard-caps the connection timeout to 20 seconds.</li>
+                            <li><em>Client-Side Chunking:</em> Reads large result sets using chunked pandas reads. Aborts if it exceeds 20 seconds.</li>
+                            <li><em>1-Indexed Dataframes:</em> Adjusts the Pandas index to start at 1 to align with non-programmer expectations.</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+
+            <div id="mod-ai" class="card">
+                <h3>AI Orchestration <span class="badge">ai_manager.py</span></h3>
+                <ul class="feature-list">
+                    <li><strong>Client Initialization:</strong> Configured for OpenAI's API standard, allowing drop-in compatibility with local models via LM Studio.</li>
+                    <li><strong>System Prompt Engineering:</strong> Highly prescriptive prompt locking the LLM into specific behaviors:
+                        <ul>
+                            <li><em>Security:</em> Explicit rules denying DDL/DML operations and enforcing schema-only querying.</li>
+                            <li><em>Syntax Strictness:</em> Enforces standard T-SQL, strict bracket encapsulation, and safe casting.</li>
+                            <li><em>Limits:</em> Mandates <code>SELECT TOP 1000</code> by default.</li>
+                            <li><em>Logic Enforcement:</em> Strict rules on explicit <code>GROUP BY</code> inclusion.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Domain Specific Injectors:</strong> Dynamically appends rules based on the active database (e.g., OpenDB wildcard rules, BankDB monetary rules).</li>
+                    <li><strong>Sanitization:</strong> Strips markdown code blocks via Regex before execution.</li>
+                </ul>
+            </div>
+
+            <div id="mod-chart" class="card">
+                <h3>Charting & Visualization <span class="badge">chart_utils.py</span></h3>
+                <ul class="feature-list">
+                    <li><strong>Plotly Express Wrapper:</strong> Generates interactive Bar, Line, and Pie Plotly figures.</li>
+                    <li><strong>Heuristic Data Mapping:</strong> If X/Y columns aren't provided, analyzes <code>df.dtypes</code> to find the first string column (X-axis) and first numeric column (Y-axis).</li>
+                    <li><strong>Reindexing Logic:</strong> Safely checks intersection of requested order list and actual data values, utilizing <code>reindex()</code> to force precise visual order.</li>
+                </ul>
+            </div>
+
+            <div id="mod-config" class="card">
+                <h3>Configuration & Settings <span class="badge">config_manager.py</span></h3>
+                <ul class="feature-list">
+                    <li>Built on Python's <code>configparser</code> to maintain state cleanly in a <code>settings.ini</code> file.</li>
+                    <li>Separates database connection data from AI parameters, providing sensible defaults to quickly unblock users starting fresh.</li>
+                </ul>
+            </div>
+
+            <div id="mod-style" class="card">
+                <h3>Styling & CSS Architecture <span class="badge">style_manager.py</span></h3>
+                <ul class="feature-list">
+                    <li><strong>Component Overrides:</strong> Injects global styles overriding the Streamlit DOM.</li>
+                    <li><strong>Visual Polish:</strong> Implements dark mode UI, tightens button paddings, hides the "Deploy" header cleanly, and styles chat bubbles with distinct alignment.</li>
+                    <li><strong>Flexbox Hacks:</strong> Heavy use of flexbox and absolute positioning to create a "borderless" feel for the history item lists, targeting Streamlit's inner divs for pixel-perfect alignment.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section id="security">
+            <h2 class="section-title">4. Security & Constraints</h2>
+            <div class="card">
+                <ul class="feature-list">
+                    <li><strong>Read-Only Enforcement:</strong> Relies heavily on the LLM prompt to refuse DML/DDL commands. (Note: Should ideally be paired with an isolated, read-only SQL Server service account).</li>
+                    <li><strong>Resource Exhaustion Prevention:</strong> Both query generation (<code>SELECT TOP 1000</code>) and execution (<code>timeout=20s</code>, chunked pandas reads) are designed to prevent hanging or crashing the database server.</li>
+                    <li><strong>SQL Injection:</strong> Executes whatever SQL the LLM generates. Classic SQL injection via input is mitigated (no direct concatenation), but prompt injection resulting in malicious SELECT queries remains a vector.</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Smooth scrolling for navigation links
+        document.querySelectorAll('nav a').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const targetId = this.getAttribute('href').substring(1);
+                const targetElement = document.getElementById(targetId);
+                
+                if (targetElement) {
+                    window.scrollTo({
+                        top: targetElement.offsetTop - 20,
+                        behavior: 'smooth'
+                    });
+                    
+                    // Update active class
+                    document.querySelectorAll('nav a').forEach(a => a.classList.remove('active'));
+                    this.classList.add('active');
+                }
+            });
+        });
+
+        // Update active navigation link on scroll
+        window.addEventListener('scroll', () => {
+            let current = '';
+            const sections = document.querySelectorAll('section');
+            const navLinks = document.querySelectorAll('nav a');
+            
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (scrollY >= sectionTop - 100) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href').substring(1) === current) {
+                    link.classList.add('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
