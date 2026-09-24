@@ -92,7 +92,7 @@ def render_sidebar(config, init_connection_func):
     """Render the sidebar configuration and history."""
     with st.sidebar:
         if st.session_state.connected:
-            st.markdown(f"### 🗃️ {config['SQL']['database']}")
+            st.markdown(f"### 🗃️ {config['SQL']['database']}")
             st.divider()
 
         # Use if/else to force a new component instance (resetting state) as 'key' is not supported
