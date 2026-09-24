@@ -135,6 +135,47 @@ on the app auto-connects on startup and drops you straight into the chat. That
 file stores the password in plaintext, so keep your filled-in copy out of version
 control.
 
+### Make the AI better at your schema (optional, high payoff)
+
+The single cheapest way to improve the SQL you get back is to **describe your
+columns in the database itself**, using SQL Server's extended properties. The app
+reads them and feeds them to the model as context, so the model stops guessing at
+what your column names mean.
+
+This matters most for the names that are obvious to you and opaque to everyone
+else. A column called `st` could be state, status, street, or start. A flag
+called `active_fl` could mean anything. Tell the database once:
+
+```sql
+-- Describe a column
+EXEC sp_addextendedproperty
+    @name       = N'MS_Description',
+    @value      = N'Two-letter US state code, e.g. TX',
+    @level0type = N'SCHEMA', @level0name = N'dbo',
+    @level1type = N'TABLE',  @level1name = N'Customers',
+    @level2type = N'COLUMN', @level2name = N'st';
+
+-- Describe a whole table (drop the @level2 lines)
+EXEC sp_addextendedproperty
+    @name       = N'MS_Description',
+    @value      = N'One row per customer. Inactive customers are kept, not deleted.',
+    @level0type = N'SCHEMA', @level0name = N'dbo',
+    @level1type = N'TABLE',  @level1name = N'Customers';
+```
+
+Use `sp_updateextendedproperty` to change one and `sp_dropextendedproperty` to
+remove it. If you'd rather click than type, SSMS exposes the same field as the
+**Description** box in the table designer's column properties.
+
+A description is worth writing whenever a name is an abbreviation, a code with a
+fixed set of values, a flag whose meaning isn't obvious, or a date that could
+mean several things (created, modified, effective). Business rules help too:
+"amounts are stored in cents" or "soft-deleted rows have `deleted_at` set" are
+exactly the kind of thing a model cannot infer from a schema dump.
+
+Descriptions are part of the cache fingerprint, so editing one invalidates the
+cached schema automatically and the next question picks it up. No restart needed.
+
 ### Want a database to try it against?
 
 `bank_schema_and_data.sql` is a self-contained script that builds a `BankDB` with
