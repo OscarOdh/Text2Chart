@@ -12,6 +12,11 @@
    table + one-click bar/line/pie chart
 ```
 
+![Text2Chart in use: the sidebar shows the connected database, saved question
+history and the size of the extracted schema. In the main panel a plain-English
+question returns a table of remaining balance by loan type, and one click turns
+that same result into a bar chart.](docs/Text2Chart.png)
+
 ---
 
 ## What problem does this solve?
