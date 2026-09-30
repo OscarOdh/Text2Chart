@@ -8,6 +8,9 @@ from textwrap import dedent
 from collections import defaultdict
 
 CACHE_DIR = ".cache"
+# Part of the cache key. Bump whenever get_schema()'s output format changes so
+# files written in the old format are not served.
+SCHEMA_FORMAT = 2
 
 class DatabaseManager:
     def __init__(self, config):
@@ -67,7 +70,7 @@ class DatabaseManager:
                             FROM sys.extended_properties), 0) AS ep_hash
             """))
             obj_hash, ep_hash = cursor.fetchone()
-            key = f"{self.server}|{self.database}|{obj_hash}|{ep_hash}"
+            key = f"{SCHEMA_FORMAT}|{self.server}|{self.database}|{obj_hash}|{ep_hash}"
             return hashlib.sha256(key.encode("utf-8")).hexdigest()[:32]
         except Exception:
             return None
@@ -100,33 +103,37 @@ class DatabaseManager:
             # 1. Fetch all columns for relevant tables in ONE query
             schema_query = dedent("""
                 SELECT 
+                    t.TABLE_SCHEMA,
                     t.TABLE_NAME,
                     c.COLUMN_NAME,
                     c.DATA_TYPE
                 FROM 
                     INFORMATION_SCHEMA.COLUMNS c
                 JOIN 
-                    INFORMATION_SCHEMA.TABLES t ON c.TABLE_NAME = t.TABLE_NAME
+                    INFORMATION_SCHEMA.TABLES t ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME
                 WHERE 
                     t.TABLE_TYPE = 'BASE TABLE' 
                     AND t.TABLE_NAME NOT LIKE 'sys%'
                     AND t.TABLE_NAME NOT LIKE 'dt%'
                 ORDER BY 
-                    t.TABLE_NAME, c.ORDINAL_POSITION
+                    t.TABLE_SCHEMA, t.TABLE_NAME, c.ORDINAL_POSITION
             """)
             cursor.execute(schema_query)
             rows = cursor.fetchall()
             
-            # Organize by Table
+            # Organize by (schema, table) so same-named tables in different
+            # schemas stay separate
             schema_map = defaultdict(list)
-            for table, col, dtype in rows:
-                schema_map[table].append(f"{col} ({dtype})")
+            for schema, table, col, dtype in rows:
+                schema_map[(schema, table)].append(f"{col} ({dtype})")
             
             # 2. Fetch Foreign Keys
             fk_query = dedent("""
                 SELECT 
+                    SCHEMA_NAME(tp.schema_id) AS ParentSchema,
                     tp.name AS ParentTable,
                     cp.name AS ParentColumn,
+                    SCHEMA_NAME(tr.schema_id) AS ReferencedSchema,
                     tr.name AS ReferencedTable,
                     cr.name AS ReferencedColumn
                 FROM 
@@ -146,12 +153,13 @@ class DatabaseManager:
             fk_rows = cursor.fetchall()
             
             fk_map = defaultdict(list)
-            for p_table, p_col, r_table, r_col in fk_rows:
-                fk_map[p_table].append(f"FK: {p_col} -> {r_table}.{r_col}")
+            for p_schema, p_table, p_col, r_schema, r_table, r_col in fk_rows:
+                fk_map[(p_schema, p_table)].append(f"FK: {p_col} -> [{r_schema}].[{r_table}].{r_col}")
 
             # 3. Fetch Indexes
             idx_query = dedent("""
                 SELECT 
+                    SCHEMA_NAME(t.schema_id) AS SchemaName,
                     t.name AS TableName,
                     i.name AS IndexName,
                     c.name AS ColumnName,
@@ -169,24 +177,25 @@ class DatabaseManager:
                 WHERE 
                     t.is_ms_shipped = 0
                 ORDER BY 
-                    t.name, i.name, ic.key_ordinal
+                    SCHEMA_NAME(t.schema_id), t.name, i.name, ic.key_ordinal
             """)
             cursor.execute(idx_query)
             idx_rows = cursor.fetchall()
             
             idx_map = defaultdict(lambda: defaultdict(list))
-            for table, idx_name, col, idx_type, is_unique, is_pk in idx_rows:
+            for schema, table, idx_name, col, idx_type, is_unique, is_pk in idx_rows:
                 meta = []
                 if is_unique: meta.append("UNIQUE")
                 if is_pk: meta.append("PK")
                 meta_str = f" ({', '.join(meta)})" if meta else ""
                 
-                # key by table -> index_name
-                idx_map[table][f"{idx_name} [{idx_type}]{meta_str}"].append(col)
+                # key by (schema, table) -> index_name
+                idx_map[(schema, table)][f"{idx_name} [{idx_type}]{meta_str}"].append(col)
 
             # 4. Fetch Extended Properties
             ep_query = dedent("""
                 SELECT 
+                    SCHEMA_NAME(t.schema_id) AS SchemaName,
                     t.name AS TableName,
                     c.name AS ColumnName,
                     ep.name AS PropertyName,
@@ -200,36 +209,38 @@ class DatabaseManager:
                 WHERE 
                     ep.class = 1
                 ORDER BY 
-                    t.name, c.name
+                    SCHEMA_NAME(t.schema_id), t.name, c.name
             """)
             cursor.execute(ep_query)
             ep_rows = cursor.fetchall()
             
             ep_map = defaultdict(list)
-            for table, col, prop_name, prop_val in ep_rows:
+            for schema, table, col, prop_name, prop_val in ep_rows:
                 target = f"{col}" if col else "TABLE"
-                ep_map[table].append(f"{target}: {prop_name} = {prop_val}")
+                ep_map[(schema, table)].append(f"{target}: {prop_name} = {prop_val}")
 
             # Construct Final String
             output_lines = []
-            for table in sorted(schema_map.keys()):
-                cols = schema_map[table]
+            for key in sorted(schema_map.keys()):
+                schema, table = key
+                cols = schema_map[key]
                 col_str = ", ".join(cols)
-                
-                parts = [f"Table: {table}", f"  Columns: {col_str}"]
-                
-                if table in fk_map:
+
+                # Schema-qualified and bracketed, so the model copies it as-is
+                parts = [f"Table: [{schema}].[{table}]", f"  Columns: {col_str}"]
+
+                if key in fk_map:
                     parts.append("  Foreign Keys:")
-                    parts.extend([f"    - {x}" for x in fk_map[table]])
-                
-                if table in idx_map:
+                    parts.extend([f"    - {x}" for x in fk_map[key]])
+
+                if key in idx_map:
                     parts.append("  Indexes:")
-                    for idx_desc, idx_cols in idx_map[table].items():
+                    for idx_desc, idx_cols in idx_map[key].items():
                         parts.append(f"    - {idx_desc}: {', '.join(idx_cols)}")
-                        
-                if table in ep_map:
+
+                if key in ep_map:
                     parts.append("  Extended Properties:")
-                    parts.extend([f"    - {x}" for x in ep_map[table]])
+                    parts.extend([f"    - {x}" for x in ep_map[key]])
 
                 output_lines.append("\n".join(parts))
 

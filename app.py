@@ -324,7 +324,9 @@ else:
             curr_db = load_config()['SQL']['database'].strip()
             sql_response = ai.generate_sql(st.session_state.schema_context, prompt, db_name=curr_db, history_messages=history)
             
-            if "[ERROR]" in sql_response or "INVALID REQUEST" in sql_response:
+            # ai_manager returns "Error calling AI: ..." when the model server
+            # can't be reached; show that instead of running it as SQL.
+            if sql_response.startswith("Error calling AI:") or "[ERROR]" in sql_response or "INVALID REQUEST" in sql_response:
                 st.session_state.messages.append({
                     "role": "assistant",
                     "type": "error",
